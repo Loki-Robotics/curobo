@@ -45,11 +45,7 @@ from omni.isaac.core import World
 from omni.isaac.core.robots import Robot
 from omni.isaac.core.utils.types import ArticulationAction
 
-try:
-    # Third Party
-    from omni.isaac.urdf import _urdf  # isaacsim 2022.2
-except ImportError:
-    from omni.importer.urdf import _urdf  # isaac sim 2023.1
+from isaacsim.asset.importer.urdf._urdf import acquire_urdf_interface, UrdfJointTargetType, ImportConfig
 
 # CuRobo
 from curobo.util.usd_helper import UsdHelper
@@ -66,7 +62,7 @@ from curobo.util_file import (
 def save_usd():
     my_world = World(stage_units_in_meters=1.0)
 
-    import_config = _urdf.ImportConfig()
+    import_config = ImportConfig()
     import_config.merge_fixed_joints = False
     import_config.convex_decomp = False
     import_config.import_inertia_tensor = True
@@ -77,7 +73,7 @@ def save_usd():
     import_config.import_inertia_tensor = False
     import_config.default_drive_strength = 10000
     import_config.default_position_drive_damping = 100
-    import_config.default_drive_type = _urdf.UrdfJointTargetType.JOINT_DRIVE_POSITION
+    import_config.default_drive_type = UrdfJointTargetType.JOINT_DRIVE_POSITION
     import_config.distance_scale = 1
     import_config.density = 0.0
     # Get the urdf file path
@@ -86,7 +82,7 @@ def save_usd():
     asset_path = join_path(
         get_assets_path(), robot_config["robot_cfg"]["kinematics"]["asset_root_path"]
     )
-    urdf_interface = _urdf.acquire_urdf_interface()
+    urdf_interface = acquire_urdf_interface()
     full_path = join_path(get_assets_path(), robot_config["robot_cfg"]["kinematics"]["urdf_path"])
     default_config = robot_config["robot_cfg"]["kinematics"]["cspace"]["retract_config"]
     j_names = robot_config["robot_cfg"]["kinematics"]["cspace"]["joint_names"]
