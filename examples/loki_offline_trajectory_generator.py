@@ -135,6 +135,17 @@ import pickle
 
 
 def main():
+    EXECUTION_FREQ = 50
+    TRAJOPT_STEPS = 64
+    FLOOR_TO_RAIL_POSITION = 0.328 + 0.325
+    TRAJECTORY_OUTPUT_PATH = "/home/antonio/Downloads/latest.pkl"
+    COLLISION_PATH = "/home/antonio/loki/brain/src/experiments/curobo/curobo_loki_one/collision_robot_body.yml"
+    INITIAL_JOINT_POSITIONS = [
+        9.2086917e-01, -1.7129261e+00, -1.7074385e+00, 2.2253511e+00,  3.7079868e-01, -1.7873198e-03, -6.2069410e-01
+    ]
+    TARGET_POS_CARRIAGE = np.array([0.41009724, -0.02905086, -0.43246284])
+    TARGET_ORIENTATION_CARRIAGE = np.array([2.37053552e-01,  9.69823156e-01,  5.69935205e-02, -6.30584251e-04])  # xyzw
+
     # create a curobo motion gen instance:
     num_targets = 0
     # assuming obstacles are in objects_path:
@@ -147,14 +158,6 @@ def main():
     # my_world.stage.SetDefaultPrim(my_world.stage.GetPrimAtPath("/World"))
     stage = my_world.stage
     # stage.SetDefaultPrim(stage.GetPrimAtPath("/World"))
-    
-    INITIAL_JOINT_POSITIONS = [
-        1.5814236904144288, -1.5960817596435548, -0.820010410118103, 1.4656777839660644, -0.14560279760360717, 0.8604071361541749, 0.3877564617156982
-    ]
-    TARGET_POS_CARRIAGE = np.array([0.12162639, -0.19741731, -0.36740836])
-    TARGET_ORIENTATION_CARRIAGE = np.array([6.94414427e-01, 7.18954213e-01, 7.05552311e-05, 2.98904357e-02])
-    FLOOR_TO_RAIL_POSITION = 0.328 + 0.325
-    TRAJECTORY_OUTPUT_PATH = "/home/antonio/Downloads/latest.pkl"
 
     setup_curobo_logger("warn")
     past_pose = None
@@ -172,20 +175,21 @@ def main():
     robot_cfg = load_yaml(join_path(robot_cfg_path, args.robot))["robot_cfg"]
 
     RAIL_POSITION = robot_cfg["kinematics"]["lock_joints"]["rail_y_joint"]
-
-    # Make a target to follow
     offset = np.array([0.0, 0.0, RAIL_POSITION + FLOOR_TO_RAIL_POSITION])
-    offset_rot_1 = Rotation.from_euler("xyz", [0, 0, -np.pi/2])
-    offset_rot_2 = Rotation.from_euler("xyz", [-np.pi/2, 0, 0])
-    target_pos = TARGET_POS_CARRIAGE + offset
-    target_rot_carriage = Rotation.from_quat(TARGET_ORIENTATION_CARRIAGE)
-    target_rot = target_rot_carriage * offset_rot_1 * offset_rot_2
-    target_orientation = target_rot.as_quat()
+
+    def carriage_to_world_taget_pose(target_pos, target_orientation):
+        target_pos = target_pos + offset
+        target_rot = Rotation.from_quat(target_orientation, scalar_first=False)  # xyzw
+        target_rot_inv = target_rot.inv()
+        target_quat = target_rot_inv.as_quat(scalar_first=True)  # wxyz
+        return np.array(target_pos), np.array(target_quat)
+
+    target_pos, target_quat = carriage_to_world_taget_pose(TARGET_POS_CARRIAGE, TARGET_ORIENTATION_CARRIAGE)
 
     target = cone.VisualCone(
         "/World/target",
-        position=target_pos, #target_pos_start, #np.array([0.0, 0.0, 0.0]),
-        orientation=target_orientation, #np.array([0.0, 1.0, 0.0, 0.0]),
+        position=target_pos,
+        orientation=target_quat,
         color=np.array([1.0, 0, 0]),
         scale=np.array([0.05, 0.05, 0.05]),
     )
@@ -202,34 +206,15 @@ def main():
     articulation_controller = None
     rail_controller = None
 
-    # collision_path = join_path(get_world_configs_path(), "collision_table.yml")
-    collision_path = "/home/antonio/loki/brain/src/experiments/curobo/curobo_loki_one/collision_robot_body.yml"
     world_cfg_table = WorldConfig.from_dict(
-        load_yaml(collision_path)
+        load_yaml(COLLISION_PATH)
     )
     # translate what is attached to the carriage
     world_cfg_table.cuboid[2].pose[2] += offset[2]
-
-
-    # world_cfg1 = WorldConfig.from_dict(
-    #     load_yaml(collision_path)
-    # ).get_mesh_world()
-    # world_cfg1.mesh[0].name += "_mesh"
-    # world_cfg1.mesh[0].pose[2] = -10.5
-
-    # world_cfg = WorldConfig(cuboid=world_cfg_table.cuboid, mesh=world_cfg1.mesh)
     world_cfg = WorldConfig(cuboid=world_cfg_table.cuboid)
 
-    # trajopt_dt = None
-    # optimize_dt = True
-    # trajopt_tsteps = 32
-    # trim_steps = None
-    # max_attempts = 16
-    # interpolation_dt = 0.05
-    # enable_finetune_trajopt = True
-    # if args.reactive:
-    trajopt_tsteps = 96*4  # 32
-    trajopt_dt = 0.05  # 0.15
+    trajopt_tsteps = TRAJOPT_STEPS
+    trajopt_dt = 1/EXECUTION_FREQ
     optimize_dt = False
     max_attempts = 16
     trim_steps = [1, None]
